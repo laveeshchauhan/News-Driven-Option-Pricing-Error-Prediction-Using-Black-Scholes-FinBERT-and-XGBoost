@@ -1,0 +1,84 @@
+"""
+Configuration constants for the Reliance Option Pricing project.
+
+All monetary values are in ₹ (Indian Rupees / INR).
+"""
+
+# ─────────────────────────────────────────────
+# Market / Financial Constants
+# ─────────────────────────────────────────────
+
+# Default risk-free rate — Indian 91-day T-Bill rate (annualized)
+DEFAULT_RISK_FREE_RATE: float = 0.07
+
+# Number of trading days per year used for volatility annualisation
+TRADING_DAYS_PER_YEAR: int = 252
+
+# Number of calendar days per year used for time-to-expiry calculation
+CALENDAR_DAYS_PER_YEAR: int = 365
+
+# Default rolling window (in trading days) for historical volatility
+DEFAULT_VOLATILITY_WINDOW: int = 30
+
+# Default dividend yield — zero for short-term options where no ex-div date
+# falls within the option's lifetime
+DEFAULT_DIVIDEND_YIELD: float = 0.0
+
+# ─────────────────────────────────────────────
+# Ticker / Asset Configuration
+# ─────────────────────────────────────────────
+
+DEFAULT_TICKER: str = "RELIANCE.NS"
+DEFAULT_SPOT_PRICE: float = 1390.20   # ₹ — from NSE screenshot dated 11-Mar-2026
+
+# ─────────────────────────────────────────────
+# NSE Option Chain Column Mappings
+# ─────────────────────────────────────────────
+# Maps raw NSE CSV headers → internal (snake_case) column names
+
+NSE_COLUMN_MAP: dict = {
+    "SYMBOL": "symbol",
+    "DATE": "date",
+    "EXPIRY": "expiry",
+    "OPTION TYPE": "option_type",
+    "STRIKE PRICE": "strike_price",
+    "OPEN": "open",
+    "HIGH": "high",
+    "LOW": "low",
+    "CLOSE": "close",
+    "LTP": "ltp",
+    "SETTLE PRICE": "settle_price",
+    "NO. OF CONTRACTS": "contracts",
+    "TURNOVER IN ₹ LAKHS": "turnover_lakhs",
+    "PREMIUM TURNOVER IN ₹ LAKHS": "premium_turnover_lakhs",
+    "OPEN INT": "open_interest",
+    "CHANGE IN OI": "change_in_oi",
+    "UNDERLYING VALUE": "underlying_value",
+}
+
+# The column in the dataset that holds the actual market premium to compare
+# against the Black-Scholes theoretical price (used to compute ΔX)
+ACTUAL_PREMIUM_COLUMN: str = "ltp"
+
+# ─────────────────────────────────────────────
+# File / Directory Paths
+# ─────────────────────────────────────────────
+
+DATA_DIR: str = "data"
+SAMPLE_DATA_DIR: str = "data/sample"
+SAMPLE_OPTION_CHAIN_PATH: str = "data/sample/sample_option_chain.csv"
+OUTPUT_DIR: str = "outputs"
+DEFAULT_OUTPUT_CSV: str = "outputs/results.csv"
+
+# ─────────────────────────────────────────────
+# Pipeline Behaviour
+# ─────────────────────────────────────────────
+
+# Minimum time-to-expiry (years) to avoid division-by-zero in BS formulae
+MIN_TIME_TO_EXPIRY: float = 1e-6
+
+# Minimum volatility to avoid division-by-zero
+MIN_VOLATILITY: float = 1e-6
+
+# Period (in years) of historical data to download for volatility estimation
+VOLATILITY_HISTORY_YEARS: int = 1
