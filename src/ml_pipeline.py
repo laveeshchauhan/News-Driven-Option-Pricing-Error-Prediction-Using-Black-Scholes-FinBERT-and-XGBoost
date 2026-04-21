@@ -64,8 +64,10 @@ def _load_input(path: str, fallback_path: str, verbose: bool) -> pd.DataFrame:
         if os.path.exists(candidate):
             if verbose:
                 print(f"  Loading data from: {candidate}")
-            parse_dates = ["date"] if "date" in pd.read_csv(candidate, nrows=0).columns else []
-            return pd.read_csv(candidate, parse_dates=parse_dates)
+            df = pd.read_csv(candidate)
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+            return df
     raise FileNotFoundError(
         f"Could not find input data at '{path}' or fallback '{fallback_path}'.\n"
         "Run Phase 1 (python main.py --demo) to generate the required CSV first."

@@ -58,9 +58,10 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
 
-    # Moneyness
+    # Moneyness — guard against zero / near-zero strike prices
     if "underlying_value" in df.columns and "strike_price" in df.columns:
-        df["moneyness"] = df["underlying_value"] / df["strike_price"].replace(0, np.nan)
+        safe_strike = df["strike_price"].where(df["strike_price"].abs() > 1e-8, other=np.nan)
+        df["moneyness"] = df["underlying_value"] / safe_strike
     else:
         df["moneyness"] = np.nan
 
