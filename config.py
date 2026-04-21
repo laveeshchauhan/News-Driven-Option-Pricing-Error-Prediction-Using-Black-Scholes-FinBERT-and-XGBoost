@@ -123,3 +123,57 @@ NEWS_MAX_ARTICLES: int = 0
 
 # Batch size for FinBERT inference
 FINBERT_BATCH_SIZE: int = 16
+
+# ─────────────────────────────────────────────
+# Phase 3 — XGBoost ΔX Prediction Model
+# ─────────────────────────────────────────────
+
+# Input CSV for Phase 3 (Phase 2 enriched output; falls back to Phase 1 output)
+ML_INPUT_CSV: str = "outputs/results_with_sentiment.csv"
+
+# Path to persist the trained XGBoost model
+ML_MODEL_PATH: str = "outputs/xgb_model.json"
+
+# Path for Phase 3 predictions CSV
+ML_PREDICTIONS_CSV: str = "outputs/predictions.csv"
+
+# Fraction of data held out for the test set
+ML_TEST_SIZE: float = 0.2
+
+# Random seed for reproducibility
+ML_RANDOM_STATE: int = 42
+
+# XGBoost hyper-parameters (sensible defaults; tunable via CLI)
+XGBOOST_N_ESTIMATORS: int = 300
+XGBOOST_MAX_DEPTH: int = 6
+XGBOOST_LEARNING_RATE: float = 0.05
+XGBOOST_SUBSAMPLE: float = 0.8
+XGBOOST_COLSAMPLE_BYTREE: float = 0.8
+XGBOOST_MIN_CHILD_WEIGHT: int = 3
+XGBOOST_REG_ALPHA: float = 0.1    # L1 regularisation
+XGBOOST_REG_LAMBDA: float = 1.0   # L2 regularisation
+
+# Feature columns used for XGBoost training
+# option_type_enc is derived (CE→1, PE→0) and moneyness = underlying_value / strike_price
+ML_FEATURE_COLUMNS: list = [
+    "strike_price",
+    "underlying_value",
+    "time_to_expiry",
+    "volatility",
+    "risk_free_rate",
+    "bs_price",
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
+    "rho",
+    "moneyness",            # engineered: S / K
+    "option_type_enc",      # engineered: CE→1, PE→0
+    "daily_sentiment_score",
+    "daily_pos_mean",
+    "daily_neg_mean",
+    "daily_article_count",
+]
+
+# Target column
+ML_TARGET_COLUMN: str = "delta_x"

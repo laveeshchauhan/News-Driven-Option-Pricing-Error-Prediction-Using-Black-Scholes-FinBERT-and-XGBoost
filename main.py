@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py — CLI Entry Point for RELIANCE Option Pricing (Phases 1 & 2).
+main.py — CLI Entry Point for RELIANCE Option Pricing (Phases 1, 2 & 3).
 
 Usage examples
 --------------
@@ -23,7 +23,13 @@ Usage examples
 # Phase 2 — with NewsAPI key:
     NEWSAPI_KEY=your_key python main.py --phase 2
 
-# Run both phases end-to-end:
+# Phase 3 — XGBoost ΔX prediction model:
+    python main.py --phase 3
+
+# Phase 3 — with charts:
+    python main.py --phase 3 --plot
+
+# Run all three phases end-to-end:
     python main.py --phase all --demo
 
 # Specify output path:
@@ -47,8 +53,20 @@ from config import (
     DEFAULT_DIVIDEND_YIELD,
     FINBERT_BATCH_SIZE,
     FINBERT_MODEL_NAME,
+    ML_INPUT_CSV,
+    ML_MODEL_PATH,
+    ML_PREDICTIONS_CSV,
+    ML_TEST_SIZE,
     NEWS_LOOKBACK_DAYS,
     SENTIMENT_OUTPUT_CSV,
+    XGBOOST_COLSAMPLE_BYTREE,
+    XGBOOST_LEARNING_RATE,
+    XGBOOST_MAX_DEPTH,
+    XGBOOST_MIN_CHILD_WEIGHT,
+    XGBOOST_N_ESTIMATORS,
+    XGBOOST_REG_ALPHA,
+    XGBOOST_REG_LAMBDA,
+    XGBOOST_SUBSAMPLE,
 )
 from src.pipeline import run_pipeline
 
@@ -69,13 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--phase",
         default="1",
-        choices=["1", "2", "all"],
+        choices=["1", "2", "3", "all"],
         metavar="PHASE",
         help=(
             "Which pipeline phase(s) to run. "
             "  '1'   — Phase 1: Black-Scholes pricing (default). "
             "  '2'   — Phase 2: FinBERT sentiment analysis. "
-            "  'all' — Run Phase 1 then Phase 2 and merge outputs."
+            "  '3'   — Phase 3: XGBoost ΔX prediction model. "
+            "  'all' — Run Phases 1 → 2 → 3 end-to-end."
         ),
     )
 
@@ -199,6 +218,93 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable reading/writing news and sentiment caches.",
     )
 
+    # ── Phase 3 parameters ─────────────────────────────────────────────────
+    p3 = parser.add_argument_group("Phase 3 — XGBoost ΔX prediction parameters")
+    p3.add_argument(
+        "--ml-input-csv",
+        default=ML_INPUT_CSV,
+        metavar="PATH",
+        help=(
+            f"Input CSV for Phase 3 — use Phase 2 output when available "
+            f"(default: {ML_INPUT_CSV})."
+        ),
+    )
+    p3.add_argument(
+        "--ml-model-path",
+        default=ML_MODEL_PATH,
+        metavar="PATH",
+        help=f"Where to save the trained XGBoost model (default: {ML_MODEL_PATH}).",
+    )
+    p3.add_argument(
+        "--ml-predictions-csv",
+        default=ML_PREDICTIONS_CSV,
+        metavar="PATH",
+        help=f"Phase 3 predictions output CSV (default: {ML_PREDICTIONS_CSV}).",
+    )
+    p3.add_argument(
+        "--ml-test-size",
+        type=float,
+        default=ML_TEST_SIZE,
+        metavar="FRACTION",
+        help=f"Fraction of data held out for testing (default: {ML_TEST_SIZE}).",
+    )
+    p3.add_argument(
+        "--xgb-n-estimators",
+        type=int,
+        default=XGBOOST_N_ESTIMATORS,
+        metavar="N",
+        help=f"XGBoost number of boosting rounds (default: {XGBOOST_N_ESTIMATORS}).",
+    )
+    p3.add_argument(
+        "--xgb-max-depth",
+        type=int,
+        default=XGBOOST_MAX_DEPTH,
+        metavar="N",
+        help=f"XGBoost max tree depth (default: {XGBOOST_MAX_DEPTH}).",
+    )
+    p3.add_argument(
+        "--xgb-learning-rate",
+        type=float,
+        default=XGBOOST_LEARNING_RATE,
+        metavar="LR",
+        help=f"XGBoost learning rate (default: {XGBOOST_LEARNING_RATE}).",
+    )
+    p3.add_argument(
+        "--xgb-subsample",
+        type=float,
+        default=XGBOOST_SUBSAMPLE,
+        metavar="RATIO",
+        help=f"XGBoost row sub-sampling ratio (default: {XGBOOST_SUBSAMPLE}).",
+    )
+    p3.add_argument(
+        "--xgb-colsample-bytree",
+        type=float,
+        default=XGBOOST_COLSAMPLE_BYTREE,
+        metavar="RATIO",
+        help=f"XGBoost feature sub-sampling ratio (default: {XGBOOST_COLSAMPLE_BYTREE}).",
+    )
+    p3.add_argument(
+        "--xgb-min-child-weight",
+        type=int,
+        default=XGBOOST_MIN_CHILD_WEIGHT,
+        metavar="N",
+        help=f"XGBoost min child weight (default: {XGBOOST_MIN_CHILD_WEIGHT}).",
+    )
+    p3.add_argument(
+        "--xgb-reg-alpha",
+        type=float,
+        default=XGBOOST_REG_ALPHA,
+        metavar="ALPHA",
+        help=f"XGBoost L1 regularisation (default: {XGBOOST_REG_ALPHA}).",
+    )
+    p3.add_argument(
+        "--xgb-reg-lambda",
+        type=float,
+        default=XGBOOST_REG_LAMBDA,
+        metavar="LAMBDA",
+        help=f"XGBoost L2 regularisation (default: {XGBOOST_REG_LAMBDA}).",
+    )
+
     # ── Shared output options ──────────────────────────────────────────────
     parser.add_argument(
         "--plot",
@@ -288,6 +394,48 @@ def _run_phase2(args, verbose: bool) -> int:
     return 0
 
 
+def _run_phase3(args, verbose: bool) -> int:
+    """Execute Phase 3 pipeline. Returns exit code."""
+    try:
+        from src.ml_pipeline import run_ml_pipeline
+    except ImportError as exc:
+        print(
+            f"ERROR: Phase 3 dependencies not installed: {exc}\n"
+            "Run: pip install xgboost>=2.1.0 scikit-learn>=1.5.0",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        run_ml_pipeline(
+            input_csv=args.ml_input_csv,
+            model_path=args.ml_model_path,
+            predictions_csv=args.ml_predictions_csv,
+            test_size=args.ml_test_size,
+            n_estimators=args.xgb_n_estimators,
+            max_depth=args.xgb_max_depth,
+            learning_rate=args.xgb_learning_rate,
+            subsample=args.xgb_subsample,
+            colsample_bytree=args.xgb_colsample_bytree,
+            min_child_weight=args.xgb_min_child_weight,
+            reg_alpha=args.xgb_reg_alpha,
+            reg_lambda=args.xgb_reg_lambda,
+            plot=args.plot,
+            verbose=verbose,
+        )
+    except FileNotFoundError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        print(
+            "Tip: Run Phase 1 first (python main.py --demo) to generate the input CSV.",
+            file=sys.stderr,
+        )
+        return 1
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -301,7 +449,10 @@ def main(argv: list[str] | None = None) -> int:
     if phase == "2":
         return _run_phase2(args, verbose)
 
-    # "all" — run both phases sequentially
+    if phase == "3":
+        return _run_phase3(args, verbose)
+
+    # "all" — run all three phases sequentially
     if phase == "all":
         if verbose:
             print("Running Phase 1 (Black-Scholes)...")
@@ -310,7 +461,12 @@ def main(argv: list[str] | None = None) -> int:
             return rc
         if verbose:
             print("\nRunning Phase 2 (Sentiment Analysis)...")
-        return _run_phase2(args, verbose)
+        rc = _run_phase2(args, verbose)
+        if rc != 0:
+            return rc
+        if verbose:
+            print("\nRunning Phase 3 (XGBoost ΔX Model)...")
+        return _run_phase3(args, verbose)
 
     parser.error(f"Unknown --phase value: {args.phase}")
     return 1
