@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py — CLI Entry Point for RELIANCE Option Pricing (Phases 1, 2 & 3).
+main.py — CLI Entry Point for RELIANCE Option Pricing (Phases 1, 2, 3 & 4).
 
 Usage examples
 --------------
@@ -29,7 +29,13 @@ Usage examples
 # Phase 3 — with charts:
     python main.py --phase 3 --plot
 
-# Run all three phases end-to-end:
+# Phase 4 — live inference (requires Phase 3 trained model):
+    python main.py --phase 4 --demo
+
+# Phase 4 — with charts:
+    python main.py --phase 4 --demo --plot
+
+# Run all four phases end-to-end:
     python main.py --phase all --demo
 
 # Specify output path:
@@ -53,6 +59,9 @@ from config import (
     DEFAULT_DIVIDEND_YIELD,
     FINBERT_BATCH_SIZE,
     FINBERT_MODEL_NAME,
+    INFERENCE_OUTPUT_CSV,
+    INFERENCE_SIGNAL_BUY_THRESHOLD,
+    INFERENCE_SIGNAL_SELL_THRESHOLD,
     ML_INPUT_CSV,
     ML_MODEL_PATH,
     ML_PREDICTIONS_CSV,
@@ -87,14 +96,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--phase",
         default="1",
-        choices=["1", "2", "3", "all"],
+        choices=["1", "2", "3", "4", "all"],
         metavar="PHASE",
         help=(
             "Which pipeline phase(s) to run. "
             "  '1'   — Phase 1: Black-Scholes pricing (default). "
             "  '2'   — Phase 2: FinBERT sentiment analysis. "
             "  '3'   — Phase 3: XGBoost ΔX prediction model. "
-            "  'all' — Run Phases 1 → 2 → 3 end-to-end."
+            "  '4'   — Phase 4: Live inference + trading signals. "
+            "  'all' — Run Phases 1 → 2 → 3 → 4 end-to-end."
         ),
     )
 
@@ -305,6 +315,33 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"XGBoost L2 regularisation (default: {XGBOOST_REG_LAMBDA}).",
     )
 
+    # ── Phase 4 parameters ─────────────────────────────────────────────────
+    p4 = parser.add_argument_group("Phase 4 — Live inference parameters")
+    p4.add_argument(
+        "--inference-output-csv",
+        default=INFERENCE_OUTPUT_CSV,
+        metavar="PATH",
+        help=f"Phase 4 live predictions output CSV (default: {INFERENCE_OUTPUT_CSV}).",
+    )
+    p4.add_argument(
+        "--buy-threshold",
+        type=float,
+        default=INFERENCE_SIGNAL_BUY_THRESHOLD,
+        metavar="₹",
+        help=(
+            f"Predicted ΔX below −threshold signals BUY (default: ₹{INFERENCE_SIGNAL_BUY_THRESHOLD})."
+        ),
+    )
+    p4.add_argument(
+        "--sell-threshold",
+        type=float,
+        default=INFERENCE_SIGNAL_SELL_THRESHOLD,
+        metavar="₹",
+        help=(
+            f"Predicted ΔX above +threshold signals SELL (default: ₹{INFERENCE_SIGNAL_SELL_THRESHOLD})."
+        ),
+    )
+
     # ── Shared output options ──────────────────────────────────────────────
     parser.add_argument(
         "--plot",
@@ -436,6 +473,46 @@ def _run_phase3(args, verbose: bool) -> int:
     return 0
 
 
+def _run_phase4(args, verbose: bool) -> int:
+    """Execute Phase 4 pipeline. Returns exit code."""
+    try:
+        from src.live_pipeline import run_live_pipeline
+    except ImportError as exc:
+        print(
+            f"ERROR: Phase 4 dependencies not installed: {exc}\n"
+            "Run: pip install xgboost>=2.1.0 scikit-learn>=1.5.0",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        run_live_pipeline(
+            input_path=args.input,
+            demo=args.demo,
+            ticker=args.ticker,
+            risk_free_rate=args.risk_free_rate,
+            volatility_window=args.volatility_window,
+            dividend_yield=args.dividend_yield,
+            model_path=args.ml_model_path,
+            output_csv=args.inference_output_csv,
+            buy_threshold=args.buy_threshold,
+            sell_threshold=args.sell_threshold,
+            plot=args.plot,
+            verbose=verbose,
+        )
+    except FileNotFoundError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        print(
+            "Tip: Run Phase 3 first (python main.py --phase 3) to train the model.",
+            file=sys.stderr,
+        )
+        return 1
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -452,7 +529,10 @@ def main(argv: list[str] | None = None) -> int:
     if phase == "3":
         return _run_phase3(args, verbose)
 
-    # "all" — run all three phases sequentially
+    if phase == "4":
+        return _run_phase4(args, verbose)
+
+    # "all" — run all four phases sequentially
     if phase == "all":
         if verbose:
             print("Running Phase 1 (Black-Scholes)...")
@@ -466,7 +546,12 @@ def main(argv: list[str] | None = None) -> int:
             return rc
         if verbose:
             print("\nRunning Phase 3 (XGBoost ΔX Model)...")
-        return _run_phase3(args, verbose)
+        rc = _run_phase3(args, verbose)
+        if rc != 0:
+            return rc
+        if verbose:
+            print("\nRunning Phase 4 (Live Inference)...")
+        return _run_phase4(args, verbose)
 
     parser.error(f"Unknown --phase value: {args.phase}")
     return 1

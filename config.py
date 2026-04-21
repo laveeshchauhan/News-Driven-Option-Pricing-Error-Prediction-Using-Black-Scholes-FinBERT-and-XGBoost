@@ -177,3 +177,17 @@ ML_FEATURE_COLUMNS: list = [
 
 # Target column
 ML_TARGET_COLUMN: str = "delta_x"
+
+# ─────────────────────────────────────────────
+# Phase 4 — Live Inference Pipeline
+# ─────────────────────────────────────────────
+
+# Output CSV for Phase 4 live predictions
+INFERENCE_OUTPUT_CSV: str = "outputs/live_predictions.csv"
+
+# Trading signal thresholds (₹).
+# BUY  signal when predicted ΔX < -INFERENCE_SIGNAL_BUY_THRESHOLD  (underpriced)
+# SELL signal when predicted ΔX >  INFERENCE_SIGNAL_SELL_THRESHOLD (overpriced)
+# HOLD otherwise (fairly priced)
+INFERENCE_SIGNAL_BUY_THRESHOLD: float = 2.0
+INFERENCE_SIGNAL_SELL_THRESHOLD: float = 2.0

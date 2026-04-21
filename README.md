@@ -15,7 +15,7 @@ This project is a **5-phase quantitative finance system** for pricing **Reliance
 | **Phase 1** | Black-Scholes Pricing Engine + Greeks | ✅ Complete |
 | **Phase 2** | FinBERT NLP Sentiment Analysis | ✅ Complete |
 | **Phase 3** | XGBoost ML Model (ΔX prediction) | ✅ Complete |
-| Phase 4 | Live Inference Pipeline | 🔜 Planned |
+| **Phase 4** | Live Inference Pipeline | ✅ Complete |
 | Phase 5 | MLOps & Monitoring | 🔜 Planned |
 
 ---
@@ -188,6 +188,80 @@ python main.py --phase 3 \
 
 ---
 
+## Phase 4 — Live Inference Pipeline
+
+Phase 4 loads the trained Phase 3 XGBoost model and runs it on **new, unseen
+option chain data** — no retraining required.  For each option it produces a
+**predicted ΔX** and an actionable **trading signal**.
+
+### How It Works
+
+```
+New option chain CSV  (or demo data)
+        ↓
+  Phase 1 pipeline  →  BS price, Greeks, ΔX
+        ↓  (optional)
+  Phase 2 sentiment  →  merge daily_sentiment_score
+        ↓
+  Feature engineering (moneyness, option_type_enc, …)
+        ↓
+  Load outputs/xgb_model.json  (Phase 3 trained model)
+        ↓
+  XGBoost inference  →  predicted_delta_x
+        ↓
+  Trading signals:
+    BUY  (long)  — predicted ΔX < −₹2  (option underpriced)
+    SELL (short) — predicted ΔX >  ₹2  (option overpriced)
+    HOLD         — |predicted ΔX| ≤ ₹2 (fairly priced)
+        ↓
+  Rank by signal priority + |ΔX|
+        ↓
+  outputs/live_predictions.csv
+  outputs/live_inference_signals.png   (with --plot)
+```
+
+### Output Columns
+
+| Column | Description |
+|--------|-------------|
+| `predicted_delta_x` | XGBoost-predicted ΔX (₹) |
+| `signal` | `BUY`, `SELL`, or `HOLD` |
+| `confidence` | `\|predicted_delta_x\|` normalised to [0, 1] within batch |
+
+### Quick Start — Phase 4
+
+```bash
+# Demo mode — no CSV or trained model required*
+python main.py --phase 4 --demo
+
+# With your own NSE option chain CSV (Phase 3 model must exist)
+python main.py --phase 4 --input data/raw/nse_option_chain.csv
+
+# With charts
+python main.py --phase 4 --demo --plot
+
+# Run all four phases end-to-end
+python main.py --phase all --demo --plot
+
+# Custom signal thresholds
+python main.py --phase 4 --demo --buy-threshold 5.0 --sell-threshold 5.0
+```
+
+> \* Demo mode auto-trains a temporary model if `outputs/xgb_model.json` is
+> absent, so no prior Phase 3 run is needed.
+
+### CLI Options (Phase 4)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--phase 4` | — | Run Phase 4 live inference pipeline |
+| `--inference-output-csv PATH` | outputs/live_predictions.csv | Predictions output CSV |
+| `--buy-threshold ₹` | 2.0 | Predicted ΔX below −threshold → BUY |
+| `--sell-threshold ₹` | 2.0 | Predicted ΔX above +threshold → SELL |
+| `--ml-model-path PATH` | outputs/xgb_model.json | Trained model to load |
+
+---
+
 ## Project Structure (Phase 1 + 2)
 
 ### Black-Scholes Inputs
@@ -242,7 +316,7 @@ P = K · e^(−rT) · N(−d₂) − S · N(−d₁)
 
 ## Phase 1 — Black-Scholes Foundation
 
-## Project Structure (Phase 1 + 2 + 3)
+## Project Structure (Phase 1 + 2 + 3 + 4)
 
 ```
 reliance-option-pricing/
@@ -265,7 +339,9 @@ reliance-option-pricing/
 │   ├── sentiment.py                   # Phase 2: FinBERT scoring + aggregation
 │   ├── sentiment_pipeline.py          # Phase 2 end-to-end orchestrator
 │   ├── model.py                       # Phase 3: XGBoost DeltaXModel wrapper
-│   └── ml_pipeline.py                 # Phase 3 end-to-end orchestrator
+│   ├── ml_pipeline.py                 # Phase 3 end-to-end orchestrator
+│   ├── inference.py                   # Phase 4: inference engine + signal generator
+│   └── live_pipeline.py               # Phase 4 end-to-end orchestrator
 │
 ├── tests/
 │   ├── __init__.py
@@ -273,7 +349,8 @@ reliance-option-pricing/
 │   ├── test_volatility.py             # Volatility unit tests
 │   ├── test_greeks.py                 # Greeks unit tests
 │   ├── test_sentiment.py              # Phase 2 sentiment unit tests
-│   └── test_model.py                  # Phase 3 XGBoost unit tests (40 tests)
+│   ├── test_model.py                  # Phase 3 XGBoost unit tests (40 tests)
+│   └── test_inference.py              # Phase 4 inference unit tests (38 tests)
 │
 ├── outputs/                           # Generated results (git-ignored)
 │   └── .gitkeep
