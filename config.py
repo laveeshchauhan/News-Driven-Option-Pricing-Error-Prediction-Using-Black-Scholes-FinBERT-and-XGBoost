@@ -82,3 +82,44 @@ MIN_VOLATILITY: float = 1e-6
 
 # Period (in years) of historical data to download for volatility estimation
 VOLATILITY_HISTORY_YEARS: int = 1
+
+# ─────────────────────────────────────────────
+# Phase 2 — NLP Sentiment Analysis
+# ─────────────────────────────────────────────
+
+# HuggingFace model name for financial sentiment classification
+FINBERT_MODEL_NAME: str = "ProsusAI/finbert"
+
+# Keywords used to filter / search news articles about RELIANCE
+NEWS_KEYWORDS: list = [
+    "Reliance Industries",
+    "RELIANCE.NS",
+    "RIL",
+    "Jio",
+    "Mukesh Ambani",
+]
+
+# Number of calendar days to look back when fetching news
+NEWS_LOOKBACK_DAYS: int = 90
+
+# RSS feed URLs (free, no API key required) — used as the default news source
+NEWS_RSS_FEEDS: list = [
+    "https://economictimes.indiatimes.com/markets/stocks/rss.cms",
+    "https://www.moneycontrol.com/rss/MCtopnews.xml",
+    "https://feeds.feedburner.com/ndtvprofit-latest",
+]
+
+# Paths for Phase 2 data/output
+NEWS_DATA_DIR: str = "data/news"
+RAW_NEWS_CACHE_PATH: str = "data/news/raw_news.csv"
+SENTIMENT_CACHE_PATH: str = "data/news/sentiment_scores.csv"
+SENTIMENT_OUTPUT_CSV: str = "outputs/results_with_sentiment.csv"
+
+# Threshold (absolute) for ΔX-based option classification — also used in Phase 2
+SENTIMENT_NEUTRAL_BAND: float = 0.05  # scores within ±0.05 of zero → "Neutral"
+
+# Maximum number of articles to process per run (0 = no limit)
+NEWS_MAX_ARTICLES: int = 0
+
+# Batch size for FinBERT inference
+FINBERT_BATCH_SIZE: int = 16

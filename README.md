@@ -13,14 +13,97 @@ This project is a **5-phase quantitative finance system** for pricing **Reliance
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **Phase 1** | Black-Scholes Pricing Engine + Greeks | ✅ Complete |
-| Phase 2 | FinBERT NLP Sentiment Analysis | 🔜 Planned |
+| **Phase 2** | FinBERT NLP Sentiment Analysis | ✅ Complete |
 | Phase 3 | XGBoost ML Model (ΔX prediction) | 🔜 Planned |
 | Phase 4 | Live Inference Pipeline | 🔜 Planned |
 | Phase 5 | MLOps & Monitoring | 🔜 Planned |
 
 ---
 
-## Phase 1 — Black-Scholes Foundation
+## Phase 2 — FinBERT Sentiment Analysis
+
+Phase 2 adds a financial news sentiment layer on top of the Phase 1 foundation.
+Sentiment from Reliance-related headlines is a known contributor to option pricing
+anomalies (ΔX) — this phase mines and scores that signal so Phase 3's XGBoost model
+can use it as a feature.
+
+### How It Works
+
+```
+NewsAPI / RSS feeds (ET Markets, Moneycontrol, NDTV Profit)
+        ↓
+  news_fetcher.py  →  data/news/raw_news.csv
+        ↓
+   sentiment.py    →  data/news/sentiment_scores.csv
+        ↓
+sentiment_pipeline.py
+        ↓  merges on date
+Phase 1 results  (delta_x, greeks, bs_price, …)
+        ↓
+outputs/results_with_sentiment.csv
+        ↓
+[Phase 3 XGBoost — features: delta_x + sentiment + greeks + moneyness + …]
+```
+
+### Sentiment Score
+
+FinBERT (`ProsusAI/finbert`) outputs three softmax probabilities for each headline:
+
+```
+score = P(positive) − P(negative)   ∈ [−1, +1]
+```
+
+Articles are aggregated per calendar day:
+
+| Column | Description |
+|--------|-------------|
+| `daily_sentiment_score` | Mean `P(pos) − P(neg)` across all articles that day |
+| `daily_sentiment_label` | Positive / Negative / Neutral |
+| `daily_article_count` | Number of Reliance articles that day |
+| `daily_pos_mean` | Mean P(positive) |
+| `daily_neg_mean` | Mean P(negative) |
+
+### Quick Start — Phase 2
+
+```bash
+# Demo (no API key or internet required)
+python main.py --phase 2 --demo
+
+# Live RSS feeds (free, no API key)
+python main.py --phase 2
+
+# With NewsAPI key (30-day history, higher article count)
+NEWSAPI_KEY=your_key python main.py --phase 2
+
+# Run both phases end-to-end
+python main.py --phase all --demo --plot
+```
+
+### CLI Options (Phase 2)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--phase 2` | — | Run Phase 2 sentiment pipeline |
+| `--phase all` | — | Run Phase 1 then Phase 2 |
+| `--newsapi-key KEY` | env `NEWSAPI_KEY` | NewsAPI.org developer key |
+| `--lookback-days N` | 90 | Days of news history to fetch |
+| `--sentiment-model MODEL` | ProsusAI/finbert | HuggingFace model name |
+| `--sentiment-batch-size N` | 16 | FinBERT inference batch size |
+| `--sentiment-output-csv PATH` | outputs/results_with_sentiment.csv | Phase 2 output |
+| `--no-cache` | False | Disable news + sentiment caching |
+
+### Fallback Chain
+
+If FinBERT is not installed (no `transformers`/`torch`), the module degrades:
+
+1. **FinBERT** (`ProsusAI/finbert`) — primary, financial-domain BERT
+2. **TextBlob** — NLTK pattern-based polarity
+3. **VADER** — rule-based financial lexicon
+4. **Neutral zeros** — if all else fails
+
+---
+
+## Project Structure (Phase 1 + 2)
 
 ### Black-Scholes Inputs
 
@@ -72,14 +155,19 @@ P = K · e^(−rT) · N(−d₂) − S · N(−d₁)
 
 ---
 
-## Project Structure
+## Phase 1 — Black-Scholes Foundation
+
+## Project Structure (Phase 1 + 2)
 
 ```
 reliance-option-pricing/
 │
 ├── data/
-│   └── sample/
-│       └── sample_option_chain.csv    # Sample NSE option chain (11-Mar-2026)
+│   ├── sample/
+│   │   └── sample_option_chain.csv    # Sample NSE option chain (11-Mar-2026)
+│   └── news/                          # Phase 2: cached news & sentiment CSVs
+│       ├── raw_news.csv               # Raw article cache
+│       └── sentiment_scores.csv       # Daily sentiment score cache
 │
 ├── src/
 │   ├── __init__.py
@@ -87,18 +175,22 @@ reliance-option-pricing/
 │   ├── volatility.py                  # Historical volatility (full + rolling)
 │   ├── greeks.py                      # Delta, Gamma, Theta, Vega, Rho
 │   ├── data_loader.py                 # Load NSE CSV + yfinance downloader
-│   └── pipeline.py                    # Phase 1 end-to-end orchestrator
+│   ├── pipeline.py                    # Phase 1 end-to-end orchestrator
+│   ├── news_fetcher.py                # Phase 2: RSS / NewsAPI downloader
+│   ├── sentiment.py                   # Phase 2: FinBERT scoring + aggregation
+│   └── sentiment_pipeline.py         # Phase 2 end-to-end orchestrator
 │
 ├── tests/
 │   ├── __init__.py
 │   ├── test_black_scholes.py          # BS engine unit tests
 │   ├── test_volatility.py             # Volatility unit tests
-│   └── test_greeks.py                 # Greeks unit tests
+│   ├── test_greeks.py                 # Greeks unit tests
+│   └── test_sentiment.py             # Phase 2 sentiment unit tests
 │
 ├── outputs/                           # Generated results (git-ignored)
 │   └── .gitkeep
 │
-├── main.py                            # CLI entry point
+├── main.py                            # CLI entry point (Phase 1 + 2)
 ├── config.py                          # Configuration constants
 ├── requirements.txt
 └── README.md
