@@ -63,10 +63,10 @@ def _to_date(value) -> Optional[date]:
     """Convert various date representations to :class:`datetime.date`."""
     if value is None:
         return None
-    if isinstance(value, date):
-        return value if isinstance(value, date) else value.date()
     if isinstance(value, datetime):
         return value.date()
+    if isinstance(value, date):
+        return value
     try:
         return pd.to_datetime(value, utc=True).date()
     except Exception:
