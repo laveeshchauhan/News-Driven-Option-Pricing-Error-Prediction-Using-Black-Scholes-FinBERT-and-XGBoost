@@ -612,7 +612,7 @@ class TestMainPhaseArg:
         from main import build_parser
         parser = build_parser()
         with pytest.raises(SystemExit):
-            parser.parse_args(["--phase", "3"])
+            parser.parse_args(["--phase", "99"])
 
     def test_no_cache_flag(self):
         from main import build_parser

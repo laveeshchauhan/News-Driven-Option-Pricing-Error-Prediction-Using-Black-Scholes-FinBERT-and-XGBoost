@@ -516,6 +516,7 @@ class TestMlPipelineIntegration:
 
             model = run_ml_pipeline(
                 input_csv=os.path.join(tmpdir, "nonexistent.csv"),
+                fallback_input_csv=fallback_path,
                 model_path=model_path,
                 predictions_csv=pred_path,
                 n_estimators=5,

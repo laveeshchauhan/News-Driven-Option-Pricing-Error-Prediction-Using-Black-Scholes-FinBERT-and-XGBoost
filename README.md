@@ -14,7 +14,7 @@ This project is a **5-phase quantitative finance system** for pricing **Reliance
 |-------|-------------|--------|
 | **Phase 1** | Black-Scholes Pricing Engine + Greeks | ✅ Complete |
 | **Phase 2** | FinBERT NLP Sentiment Analysis | ✅ Complete |
-| Phase 3 | XGBoost ML Model (ΔX prediction) | 🔜 Planned |
+| **Phase 3** | XGBoost ML Model (ΔX prediction) | ✅ Complete |
 | Phase 4 | Live Inference Pipeline | 🔜 Planned |
 | Phase 5 | MLOps & Monitoring | 🔜 Planned |
 
@@ -103,6 +103,91 @@ If FinBERT is not installed (no `transformers`/`torch`), the module degrades:
 
 ---
 
+## Phase 3 — XGBoost ΔX Prediction Model
+
+Phase 3 trains an **XGBoost regression model** to predict option mispricing (ΔX) using the
+enriched feature set from Phases 1 & 2 as inputs.
+
+### How It Works
+
+```
+outputs/results_with_sentiment.csv   (Phase 2 output)
+  — or —
+outputs/results.csv                  (Phase 1 fallback)
+        ↓
+  Feature engineering
+    • moneyness   = S / K
+    • option_type_enc  (CE→1, PE→0)
+    • fill missing sentiment columns → 0
+        ↓
+  Train / test split  (80 % / 20 %)
+        ↓
+  XGBoost regression  →  predict ΔX
+        ↓
+  Evaluate  (RMSE, MAE, R²)
+        ↓
+  outputs/xgb_model.json         (saved model)
+  outputs/predictions.csv        (test-set predictions)
+  outputs/xgb_feature_importance.png
+  outputs/xgb_actual_vs_predicted.png
+  outputs/xgb_residuals.png
+```
+
+### Features Used
+
+| Feature | Source |
+|---------|--------|
+| `strike_price` | Phase 1 |
+| `underlying_value` | Phase 1 |
+| `time_to_expiry` | Phase 1 |
+| `volatility` | Phase 1 |
+| `risk_free_rate` | Phase 1 |
+| `bs_price` | Phase 1 |
+| `delta`, `gamma`, `theta`, `vega`, `rho` | Phase 1 Greeks |
+| `moneyness` (S/K) | Engineered |
+| `option_type_enc` (CE→1, PE→0) | Engineered |
+| `daily_sentiment_score` | Phase 2 |
+| `daily_pos_mean`, `daily_neg_mean` | Phase 2 |
+| `daily_article_count` | Phase 2 |
+
+### Quick Start — Phase 3
+
+```bash
+# Train on Phase 2 enriched data (recommended)
+python main.py --phase 3
+
+# Train with charts
+python main.py --phase 3 --plot
+
+# Run all three phases end-to-end
+python main.py --phase all --demo --plot
+
+# Custom XGBoost hyper-parameters
+python main.py --phase 3 \
+    --xgb-n-estimators 500 \
+    --xgb-max-depth 4 \
+    --xgb-learning-rate 0.02
+```
+
+### CLI Options (Phase 3)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--phase 3` | — | Run Phase 3 XGBoost model |
+| `--ml-input-csv PATH` | outputs/results_with_sentiment.csv | Input data (Phase 2 output) |
+| `--ml-model-path PATH` | outputs/xgb_model.json | Where to save trained model |
+| `--ml-predictions-csv PATH` | outputs/predictions.csv | Test-set predictions CSV |
+| `--ml-test-size FRACTION` | 0.2 | Fraction held out for testing |
+| `--xgb-n-estimators N` | 300 | Boosting rounds |
+| `--xgb-max-depth N` | 6 | Max tree depth |
+| `--xgb-learning-rate LR` | 0.05 | Learning rate |
+| `--xgb-subsample RATIO` | 0.8 | Row sub-sampling |
+| `--xgb-colsample-bytree RATIO` | 0.8 | Feature sub-sampling |
+| `--xgb-reg-alpha ALPHA` | 0.1 | L1 regularisation |
+| `--xgb-reg-lambda LAMBDA` | 1.0 | L2 regularisation |
+
+---
+
 ## Project Structure (Phase 1 + 2)
 
 ### Black-Scholes Inputs
@@ -157,7 +242,7 @@ P = K · e^(−rT) · N(−d₂) − S · N(−d₁)
 
 ## Phase 1 — Black-Scholes Foundation
 
-## Project Structure (Phase 1 + 2)
+## Project Structure (Phase 1 + 2 + 3)
 
 ```
 reliance-option-pricing/
@@ -178,19 +263,22 @@ reliance-option-pricing/
 │   ├── pipeline.py                    # Phase 1 end-to-end orchestrator
 │   ├── news_fetcher.py                # Phase 2: RSS / NewsAPI downloader
 │   ├── sentiment.py                   # Phase 2: FinBERT scoring + aggregation
-│   └── sentiment_pipeline.py         # Phase 2 end-to-end orchestrator
+│   ├── sentiment_pipeline.py          # Phase 2 end-to-end orchestrator
+│   ├── model.py                       # Phase 3: XGBoost DeltaXModel wrapper
+│   └── ml_pipeline.py                 # Phase 3 end-to-end orchestrator
 │
 ├── tests/
 │   ├── __init__.py
 │   ├── test_black_scholes.py          # BS engine unit tests
 │   ├── test_volatility.py             # Volatility unit tests
 │   ├── test_greeks.py                 # Greeks unit tests
-│   └── test_sentiment.py             # Phase 2 sentiment unit tests
+│   ├── test_sentiment.py              # Phase 2 sentiment unit tests
+│   └── test_model.py                  # Phase 3 XGBoost unit tests (40 tests)
 │
 ├── outputs/                           # Generated results (git-ignored)
 │   └── .gitkeep
 │
-├── main.py                            # CLI entry point (Phase 1 + 2)
+├── main.py                            # CLI entry point (Phase 1 + 2 + 3)
 ├── config.py                          # Configuration constants
 ├── requirements.txt
 └── README.md
