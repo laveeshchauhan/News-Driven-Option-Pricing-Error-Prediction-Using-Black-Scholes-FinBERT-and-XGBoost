@@ -1,0 +1,5 @@
+"""
+outputs/.gitkeep — Placeholder to keep the outputs directory in version control.
+
+Results CSV and chart images are written here at runtime and are git-ignored.
+"""
