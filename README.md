@@ -16,7 +16,109 @@ This project is a **5-phase quantitative finance system** for pricing **Reliance
 | **Phase 2** | FinBERT NLP Sentiment Analysis | ✅ Complete |
 | **Phase 3** | XGBoost ML Model (ΔX prediction) | ✅ Complete |
 | **Phase 4** | Live Inference Pipeline | ✅ Complete |
-| Phase 5 | MLOps & Monitoring | 🔜 Planned |
+| **Phase 5** | MLOps & Monitoring | ✅ Complete |
+
+---
+
+## Phase 5 — MLOps & Monitoring
+
+Phase 5 adds lightweight, self-contained MLOps capabilities to the pipeline:
+model performance tracking, feature drift detection, run logging, and
+automated health reporting — no external MLOps service required.
+
+### How It Works
+
+```
+Phase 4 live_predictions.csv   (or demo data)
+        ↓
+  monitor.py  →  detect_data_drift (PSI + KS test per feature)
+        ↓
+  monitor.py  →  monitor_predictions (RMSE, MAE, R², signal accuracy)
+        ↓
+  monitor.py  →  check_alerts (critical / warning thresholds)
+        ↓
+  monitor.py  →  log_run  →  outputs/run_log.jsonl
+        ↓
+  monitor.py  →  generate_report  →  outputs/monitoring_report.json
+        ↓
+  monitoring_pipeline.py  →  console summary + optional drift chart
+```
+
+### Drift Detection
+
+Two complementary statistical tests are run per feature:
+
+| Method | What it measures |
+|--------|-----------------|
+| **PSI** (Population Stability Index) | Bucket-level distribution shift between baseline and new data |
+| **KS test** (Kolmogorov–Smirnov two-sample) | Overall distributional difference |
+
+PSI interpretation:
+
+| PSI range | Status | Action |
+|-----------|--------|--------|
+| < 0.10 | ✅ OK | No action needed |
+| 0.10 – 0.20 | ⚠️ Warning | Monitor closely |
+| > 0.20 | 🔴 Alert | Consider retraining |
+
+### Outputs
+
+| File | Description |
+|------|-------------|
+| `outputs/monitoring_baseline.json` | Per-feature statistics from training set (reference for drift) |
+| `outputs/run_log.jsonl` | Append-only log — one JSON record per pipeline run |
+| `outputs/monitoring_report.json` | Latest full monitoring report (drift + perf + alerts) |
+| `outputs/monitoring_drift.png` | Feature drift PSI bar chart (with `--plot`) |
+
+### Quick Start — Phase 5
+
+```bash
+# Demo mode — no CSV or trained model required
+python main.py --phase 5 --demo
+
+# With existing Phase 4 predictions
+python main.py --phase 5
+
+# With drift chart
+python main.py --phase 5 --demo --plot
+
+# Force re-build of the monitoring baseline
+python main.py --phase 5 --demo --refresh-baseline
+
+# Run all five phases end-to-end
+python main.py --phase all --demo --plot
+```
+
+### CLI Options (Phase 5)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--phase 5` | — | Run Phase 5 MLOps & Monitoring pipeline |
+| `--monitoring-predictions-csv PATH` | outputs/live_predictions.csv | Phase 4 predictions to analyse |
+| `--monitoring-training-csv PATH` | outputs/results.csv | Training data for baseline creation |
+| `--monitoring-baseline-path PATH` | outputs/monitoring_baseline.json | Baseline JSON path |
+| `--monitoring-run-log PATH` | outputs/run_log.jsonl | JSONL run log path |
+| `--monitoring-report PATH` | outputs/monitoring_report.json | Monitoring report output path |
+| `--refresh-baseline` | False | Force re-creation of the baseline |
+
+### Monitoring Report Structure
+
+```json
+{
+  "report_generated_at": "2026-04-21T21:00:00+00:00",
+  "overall_health": "ok",
+  "summary": {
+    "drift_status": "ok",
+    "n_critical_alerts": 0,
+    "n_warning_alerts": 0,
+    "n_features_drifted": 0
+  },
+  "drift": { "feature_drift": { … }, "drifted_features": [] },
+  "performance": { "rmse": 2.31, "mae": 1.82, "r2": 0.91, … },
+  "alerts": [],
+  "run_history": [ … ]
+}
+```
 
 ---
 
@@ -316,7 +418,7 @@ P = K · e^(−rT) · N(−d₂) − S · N(−d₁)
 
 ## Phase 1 — Black-Scholes Foundation
 
-## Project Structure (Phase 1 + 2 + 3 + 4)
+## Project Structure (Phase 1 + 2 + 3 + 4 + 5)
 
 ```
 reliance-option-pricing/
@@ -341,7 +443,9 @@ reliance-option-pricing/
 │   ├── model.py                       # Phase 3: XGBoost DeltaXModel wrapper
 │   ├── ml_pipeline.py                 # Phase 3 end-to-end orchestrator
 │   ├── inference.py                   # Phase 4: inference engine + signal generator
-│   └── live_pipeline.py               # Phase 4 end-to-end orchestrator
+│   ├── live_pipeline.py               # Phase 4 end-to-end orchestrator
+│   ├── monitor.py                     # Phase 5: drift detection, run logging, reports
+│   └── monitoring_pipeline.py         # Phase 5 end-to-end orchestrator
 │
 ├── tests/
 │   ├── __init__.py
@@ -350,12 +454,13 @@ reliance-option-pricing/
 │   ├── test_greeks.py                 # Greeks unit tests
 │   ├── test_sentiment.py              # Phase 2 sentiment unit tests
 │   ├── test_model.py                  # Phase 3 XGBoost unit tests (40 tests)
-│   └── test_inference.py              # Phase 4 inference unit tests (38 tests)
+│   ├── test_inference.py              # Phase 4 inference unit tests (38 tests)
+│   └── test_monitor.py                # Phase 5 monitoring unit tests (68 tests)
 │
 ├── outputs/                           # Generated results (git-ignored)
 │   └── .gitkeep
 │
-├── main.py                            # CLI entry point (Phase 1 + 2 + 3)
+├── main.py                            # CLI entry point (Phases 1–5)
 ├── config.py                          # Configuration constants
 ├── requirements.txt
 └── README.md

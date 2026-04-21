@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py — CLI Entry Point for RELIANCE Option Pricing (Phases 1, 2, 3 & 4).
+main.py — CLI Entry Point for RELIANCE Option Pricing (Phases 1–5).
 
 Usage examples
 --------------
@@ -35,7 +35,16 @@ Usage examples
 # Phase 4 — with charts:
     python main.py --phase 4 --demo --plot
 
-# Run all four phases end-to-end:
+# Phase 5 — MLOps & Monitoring (monitor drift, performance, generate report):
+    python main.py --phase 5 --demo
+
+# Phase 5 — with drift chart:
+    python main.py --phase 5 --demo --plot
+
+# Phase 5 — force refresh the baseline:
+    python main.py --phase 5 --demo --refresh-baseline
+
+# Run all five phases end-to-end:
     python main.py --phase all --demo
 
 # Specify output path:
@@ -66,6 +75,9 @@ from config import (
     ML_MODEL_PATH,
     ML_PREDICTIONS_CSV,
     ML_TEST_SIZE,
+    MONITOR_BASELINE_PATH,
+    MONITOR_REPORT_PATH,
+    MONITOR_RUN_LOG_PATH,
     NEWS_LOOKBACK_DAYS,
     SENTIMENT_OUTPUT_CSV,
     XGBOOST_COLSAMPLE_BYTREE,
@@ -96,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--phase",
         default="1",
-        choices=["1", "2", "3", "4", "all"],
+        choices=["1", "2", "3", "4", "5", "all"],
         metavar="PHASE",
         help=(
             "Which pipeline phase(s) to run. "
@@ -104,7 +116,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  '2'   — Phase 2: FinBERT sentiment analysis. "
             "  '3'   — Phase 3: XGBoost ΔX prediction model. "
             "  '4'   — Phase 4: Live inference + trading signals. "
-            "  'all' — Run Phases 1 → 2 → 3 → 4 end-to-end."
+            "  '5'   — Phase 5: MLOps & Monitoring (drift detection + report). "
+            "  'all' — Run Phases 1 → 2 → 3 → 4 → 5 end-to-end."
         ),
     )
 
@@ -342,6 +355,51 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # ── Phase 5 parameters ─────────────────────────────────────────────────
+    p5 = parser.add_argument_group("Phase 5 — MLOps & Monitoring parameters")
+    p5.add_argument(
+        "--monitoring-predictions-csv",
+        default=INFERENCE_OUTPUT_CSV,
+        metavar="PATH",
+        help=(
+            f"Phase 4 live predictions CSV to monitor (default: {INFERENCE_OUTPUT_CSV}). "
+            "If absent, demo data is used."
+        ),
+    )
+    p5.add_argument(
+        "--monitoring-training-csv",
+        default=DEFAULT_OUTPUT_CSV,
+        metavar="PATH",
+        help=(
+            f"Phase 1/3 results CSV used to build the drift baseline "
+            f"(default: {DEFAULT_OUTPUT_CSV})."
+        ),
+    )
+    p5.add_argument(
+        "--monitoring-baseline-path",
+        default=MONITOR_BASELINE_PATH,
+        metavar="PATH",
+        help=f"Where to store the monitoring baseline JSON (default: {MONITOR_BASELINE_PATH}).",
+    )
+    p5.add_argument(
+        "--monitoring-run-log",
+        default=MONITOR_RUN_LOG_PATH,
+        metavar="PATH",
+        help=f"JSONL run log path (default: {MONITOR_RUN_LOG_PATH}).",
+    )
+    p5.add_argument(
+        "--monitoring-report",
+        default=MONITOR_REPORT_PATH,
+        metavar="PATH",
+        help=f"Monitoring report JSON output path (default: {MONITOR_REPORT_PATH}).",
+    )
+    p5.add_argument(
+        "--refresh-baseline",
+        action="store_true",
+        default=False,
+        help="Force re-creation of the monitoring baseline from the training CSV.",
+    )
+
     # ── Shared output options ──────────────────────────────────────────────
     parser.add_argument(
         "--plot",
@@ -513,6 +571,42 @@ def _run_phase4(args, verbose: bool) -> int:
     return 0
 
 
+def _run_phase5(args, verbose: bool) -> int:
+    """Execute Phase 5 MLOps & Monitoring pipeline. Returns exit code."""
+    try:
+        from src.monitoring_pipeline import run_monitoring_pipeline
+    except ImportError as exc:
+        print(
+            f"ERROR: Phase 5 dependencies not installed: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        run_monitoring_pipeline(
+            predictions_csv=args.monitoring_predictions_csv,
+            training_csv=args.monitoring_training_csv,
+            baseline_path=args.monitoring_baseline_path,
+            run_log_path=args.monitoring_run_log,
+            report_path=args.monitoring_report,
+            force_baseline_refresh=args.refresh_baseline,
+            demo=args.demo,
+            ticker=args.ticker,
+            risk_free_rate=args.risk_free_rate,
+            volatility_window=args.volatility_window,
+            dividend_yield=args.dividend_yield,
+            model_path=args.ml_model_path,
+            buy_threshold=args.buy_threshold,
+            sell_threshold=args.sell_threshold,
+            plot=args.plot,
+            verbose=verbose,
+        )
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -532,7 +626,10 @@ def main(argv: list[str] | None = None) -> int:
     if phase == "4":
         return _run_phase4(args, verbose)
 
-    # "all" — run all four phases sequentially
+    if phase == "5":
+        return _run_phase5(args, verbose)
+
+    # "all" — run all five phases sequentially
     if phase == "all":
         if verbose:
             print("Running Phase 1 (Black-Scholes)...")
@@ -551,7 +648,12 @@ def main(argv: list[str] | None = None) -> int:
             return rc
         if verbose:
             print("\nRunning Phase 4 (Live Inference)...")
-        return _run_phase4(args, verbose)
+        rc = _run_phase4(args, verbose)
+        if rc != 0:
+            return rc
+        if verbose:
+            print("\nRunning Phase 5 (MLOps & Monitoring)...")
+        return _run_phase5(args, verbose)
 
     parser.error(f"Unknown --phase value: {args.phase}")
     return 1

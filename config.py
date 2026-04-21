@@ -191,3 +191,33 @@ INFERENCE_OUTPUT_CSV: str = "outputs/live_predictions.csv"
 # HOLD otherwise (fairly priced)
 INFERENCE_SIGNAL_BUY_THRESHOLD: float = 2.0
 INFERENCE_SIGNAL_SELL_THRESHOLD: float = 2.0
+
+# ─────────────────────────────────────────────
+# Phase 5 — MLOps & Monitoring
+# ─────────────────────────────────────────────
+
+# JSONL file that accumulates one record per training/inference run
+MONITOR_RUN_LOG_PATH: str = "outputs/run_log.jsonl"
+
+# JSON file that stores the baseline feature statistics from the training set
+MONITOR_BASELINE_PATH: str = "outputs/monitoring_baseline.json"
+
+# JSON report summarising system health (overwritten each Phase 5 run)
+MONITOR_REPORT_PATH: str = "outputs/monitoring_report.json"
+
+# PSI (Population Stability Index) threshold above which drift is flagged
+# PSI < 0.1  → insignificant drift
+# PSI 0.1–0.2 → moderate drift (warning)
+# PSI > 0.2  → significant drift (alert)
+MONITOR_PSI_WARNING_THRESHOLD: float = 0.1
+MONITOR_PSI_ALERT_THRESHOLD: float = 0.2
+
+# KS test p-value below which drift is flagged (two-sample, per feature)
+MONITOR_KS_PVALUE_THRESHOLD: float = 0.05
+
+# Model performance degradation threshold: RMSE increase (₹) vs. baseline
+# that triggers a retrain recommendation
+MONITOR_RMSE_DEGRADATION_THRESHOLD: float = 5.0
+
+# Maximum number of run-log records to include in the report history section
+MONITOR_MAX_HISTORY_RECORDS: int = 100
